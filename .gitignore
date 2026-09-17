@@ -1,18 +1,20 @@
 # Environment & Secrets
 .env
-*.env
-backend/.env
 .env.*
+!.env.example
+backend/.env
 
-# Python Cache
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.pyo
+.venv/
+venv/
 .pytest_cache/
 .coverage
 htmlcov/
 
-# Node / JS
+# Node / JavaScript
 node_modules/
 dist/
 build/
@@ -22,6 +24,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# OS Files
+# Test / temporary files
+test-repo/
+
+# OS
 .DS_Store
 Thumbs.db
