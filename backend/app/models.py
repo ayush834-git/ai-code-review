@@ -1,6 +1,6 @@
 from enum import Enum
-
-from pydantic import BaseModel, Field
+from typing import Optional
+from pydantic import BaseModel, Field, model_validator
 
 
 class Severity(str, Enum):
@@ -59,9 +59,9 @@ class ExplainResponse(BaseModel):
 
 
 class FixRequest(BaseModel):
-    scan_id: str | None = None
-    finding_id: str | None = None
-    finding: Finding | None = None
+    scan_id: Optional[str] = None
+    finding_id: Optional[str] = None
+    finding: Optional[Finding] = None
 
 
 class FixResponse(BaseModel):
@@ -72,19 +72,58 @@ class FixResponse(BaseModel):
     diff: str
     explanation_of_change: str
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    line_number: Optional[int] = Field(None, description="1-indexed line number of vulnerable code")
+    rule_id: Optional[str] = Field(None, description="Rule or vulnerability identifier")
+    severity: Optional[str] = Field(None, description="Severity level: CRITICAL, HIGH, MEDIUM, LOW")
+    cwe: Optional[str] = Field(None, description="CWE category identifier and name")
+    title: Optional[str] = Field(None, description="Vulnerability title")
 
 
 class ApplyPRRequest(BaseModel):
-    scan_id: str
-    finding_ids: list[str]
+    """
+    Request payload for applying a security patch and creating a GitHub Pull Request.
+    """
+    owner: Optional[str] = Field(None, description="GitHub repository owner/organization")
+    repo: Optional[str] = Field(None, description="GitHub repository name")
+    file_path: str = Field(..., description="Target file path in repository (e.g. api/users.js)")
+    line_number: int = Field(..., ge=1, description="1-indexed line number of vulnerable code")
+    fixed_code: str = Field(..., description="Patched code to replace the vulnerable line")
+    original_code: Optional[str] = Field(None, description="Original vulnerable code snippet for diff display")
+    diff: Optional[str] = Field(None, description="Unified diff details")
+    rule_id: Optional[str] = Field("sqli", description="Rule or vulnerability type identifier (e.g. sqli, rce, xss)")
+    finding_id: Optional[str] = Field("f001", description="Unique finding ID")
+    severity: Optional[str] = Field("CRITICAL", description="Severity level: CRITICAL, HIGH, MEDIUM, LOW")
+    cwe: Optional[str] = Field("CWE-89: SQL Injection", description="CWE category identifier and name")
+    title: Optional[str] = Field(None, description="Pull Request title (auto-generated if omitted)")
+    explanation: Optional[str] = Field(None, description="AI explanation of why this vulnerability occurred")
+    explanation_of_change: Optional[str] = Field(None, description="Alias for explanation from FixResponse")
+    impact: Optional[str] = Field(None, description="Security impact assessment of the vulnerability")
+    base_branch: Optional[str] = Field(None, description="Target base branch for PR (defaults to repo default or main)")
+    scan_id: Optional[str] = Field(None, description="Scan ID if provided from scan pipeline")
+    finding_ids: Optional[list[str]] = Field(None, description="List of finding IDs if batched")
+
+    @model_validator(mode="after")
+    def normalize_fields(self):
+        if not self.explanation and self.explanation_of_change:
+            self.explanation = self.explanation_of_change
+        return self
 
 
 class ApplyPRResponse(BaseModel):
-    branch: str
-    commit_sha: str
-    pr_number: int
-    pr_url: str
-    files_changed: int
+    """
+    Response returned after successfully creating a branch, committing the patch, and opening a PR.
+    """
+    branch: str = Field(..., description="Name of the generated patch branch")
+    commit_sha: str = Field(..., description="SHA of the fix commit")
+    pr_number: int = Field(..., description="Pull Request number on GitHub")
+    pr_url: str = Field(..., description="Direct URL to view the created Pull Request")
+    files_changed: int = Field(1, description="Number of files modified in the PR")
+
+
+class HealthResponse(BaseModel):
+    status: str = "ok"
+    service: str = "ai-code-review-backend"
+    github_token_configured: bool
 
 
 class ErrorResponse(BaseModel):

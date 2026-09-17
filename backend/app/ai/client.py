@@ -152,6 +152,7 @@ class AIFixAgent:
         explanation: str = SAFE_FAILURE_EXPLANATION,
     ) -> FixResponse:
         """Create a standard FixResponse representing a safe failure."""
+        severity_val = finding.severity.value if hasattr(finding.severity, "value") else str(finding.severity)
         return FixResponse(
             finding_id=finding.id,
             file_path=finding.file_path,
@@ -160,6 +161,11 @@ class AIFixAgent:
             diff="",
             explanation_of_change=explanation,
             confidence=0.0,
+            line_number=finding.line_start,
+            rule_id=finding.rule_id,
+            severity=severity_val,
+            cwe=finding.cwe,
+            title=finding.title,
         )
 
     def _process_model_response(
@@ -208,6 +214,8 @@ class AIFixAgent:
         except (ValueError, TypeError):
             confidence = 0.5 if fixed_code else 0.0
 
+        severity_val = finding.severity.value if hasattr(finding.severity, "value") else str(finding.severity)
+
         return FixResponse(
             finding_id=data.get("finding_id", finding.id),
             file_path=data.get("file_path", finding.file_path),
@@ -216,6 +224,11 @@ class AIFixAgent:
             diff=diff_val,
             explanation_of_change=data.get("explanation_of_change", ""),
             confidence=confidence,
+            line_number=finding.line_start,
+            rule_id=finding.rule_id,
+            severity=severity_val,
+            cwe=finding.cwe,
+            title=finding.title,
         )
 
     def generate_fix(
