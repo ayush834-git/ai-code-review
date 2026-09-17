@@ -39,7 +39,7 @@ router.get('/profile', (req, res) => {
  */
 router.get('/:id', (req, res) => {
   const id = req.params.id;
-  db.query("SELECT * FROM users WHERE id=" + id);
+  db.query('SELECT * FROM users WHERE id = ?', [id]);
   // Return response
   res.json({ message: "User query executed", id: id });
 });
