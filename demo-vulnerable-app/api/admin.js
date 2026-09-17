@@ -18,7 +18,7 @@ router.get('/ping', (req, res) => {
   logger.info(`Running network diagnostic ping against: ${host}`);
 
   // Vulnerable: Command injection via unvalidated host parameter
-  exec("ping -c 1 " + host, (err, stdout, stderr) => {
+  require('child_process').execFile("ping", ["-c", "1", host], (err, stdout, stderr) => {
     if (err) {
       logger.error('Diagnostic command failed: ' + err.message);
       return res.status(500).json({ error: 'Diagnostic test failed', details: stderr });
