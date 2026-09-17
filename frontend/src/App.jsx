@@ -86,7 +86,7 @@ export default function App() {
     if (!selectedFinding) return;
     setIsCreatingPr(true);
     try {
-      const data = await createPullRequest(scanData?.scan_id, [selectedFinding.id]);
+      const data = await createPullRequest(scanData?.scan_id, [selectedFinding.id], fixes[selectedFinding.id], selectedFinding);
       setPullRequests(prev => ({
         ...prev,
         [selectedFinding.id]: data

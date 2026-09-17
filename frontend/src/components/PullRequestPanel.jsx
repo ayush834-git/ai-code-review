@@ -204,7 +204,7 @@ export default function PullRequestPanel({
             </p>
 
             <a
-              href={prData.pr_url || "https://github.com/org/demo-repo/pull/7"}
+              href={prData.pr_url}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30"

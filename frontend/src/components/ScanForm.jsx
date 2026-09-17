@@ -42,7 +42,7 @@ export default function ScanForm({ onScan, isScanning }) {
   };
 
   const handleLoadDemo = () => {
-    const demoUrl = 'https://github.com/org/demo-repo';
+    const demoUrl = 'https://github.com/ayush834-git/ai-code-review';
     setRepoUrl(demoUrl);
     setError('');
     onScan(demoUrl);
