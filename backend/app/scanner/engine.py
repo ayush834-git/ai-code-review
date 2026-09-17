@@ -90,6 +90,9 @@ def scan_file(file_path: Path, repo_path: Path, finding_counter: int) -> tuple[l
     relative_path = file_path.relative_to(repo_path).as_posix()
 
     for line_number, line in enumerate(lines, start=1):
+        stripped_line = line.strip()
+        if stripped_line.startswith(("//", "*", "/*", "<!--")):
+            continue
 
         for rule in RULES:
 

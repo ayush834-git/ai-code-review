@@ -47,8 +47,9 @@ class ScanResponse(BaseModel):
 
 
 class ExplainRequest(BaseModel):
-    scan_id: str
-    finding_id: str
+    scan_id: Optional[str] = None
+    finding_id: Optional[str] = None
+    finding: Optional[Finding] = None
 
 
 class ExplainResponse(BaseModel):
@@ -85,15 +86,15 @@ class ApplyPRRequest(BaseModel):
     """
     owner: Optional[str] = Field(None, description="GitHub repository owner/organization")
     repo: Optional[str] = Field(None, description="GitHub repository name")
-    file_path: str = Field(..., description="Target file path in repository (e.g. api/users.js)")
-    line_number: int = Field(..., ge=1, description="1-indexed line number of vulnerable code")
-    fixed_code: str = Field(..., description="Patched code to replace the vulnerable line")
+    file_path: Optional[str] = Field(None, description="Target file path in repository (e.g. api/users.js)")
+    line_number: Optional[int] = Field(None, ge=1, description="1-indexed line number of vulnerable code")
+    fixed_code: Optional[str] = Field(None, description="Patched code to replace the vulnerable line")
     original_code: Optional[str] = Field(None, description="Original vulnerable code snippet for diff display")
     diff: Optional[str] = Field(None, description="Unified diff details")
-    rule_id: Optional[str] = Field("sqli", description="Rule or vulnerability type identifier (e.g. sqli, rce, xss)")
-    finding_id: Optional[str] = Field("f001", description="Unique finding ID")
-    severity: Optional[str] = Field("CRITICAL", description="Severity level: CRITICAL, HIGH, MEDIUM, LOW")
-    cwe: Optional[str] = Field("CWE-89: SQL Injection", description="CWE category identifier and name")
+    rule_id: Optional[str] = Field(None, description="Rule or vulnerability type identifier (e.g. sqli, rce, xss)")
+    finding_id: Optional[str] = Field(None, description="Unique finding ID")
+    severity: Optional[str] = Field(None, description="Severity level: CRITICAL, HIGH, MEDIUM, LOW")
+    cwe: Optional[str] = Field(None, description="CWE category identifier and name")
     title: Optional[str] = Field(None, description="Pull Request title (auto-generated if omitted)")
     explanation: Optional[str] = Field(None, description="AI explanation of why this vulnerability occurred")
     explanation_of_change: Optional[str] = Field(None, description="Alias for explanation from FixResponse")
@@ -124,6 +125,7 @@ class HealthResponse(BaseModel):
     status: str = "ok"
     service: str = "ai-code-review-backend"
     github_token_configured: bool
+    config_status: Optional[dict[str, bool]] = None
 
 
 class ErrorResponse(BaseModel):

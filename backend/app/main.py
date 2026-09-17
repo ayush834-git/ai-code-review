@@ -18,6 +18,8 @@ from app.github.client import (
 from app.models import (
     ApplyPRRequest,
     ApplyPRResponse,
+    ExplainRequest,
+    ExplainResponse,
     Finding,
     FixRequest,
     FixResponse,
@@ -29,7 +31,7 @@ from app.models import (
 from app.scanner.engine import scan_repository
 
 # Load environment configuration
-load_dotenv()
+load_dotenv(override=True)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ai_code_review_backend")
@@ -61,6 +63,9 @@ def root():
     }
 
 
+from app.config import get_config_status
+
+
 @app.get("/health", response_model=HealthResponse)
 @app.get("/api/health", response_model=HealthResponse)
 async def health_check():
@@ -72,14 +77,21 @@ async def health_check():
         status="ok",
         service="ai-code-review-backend",
         github_token_configured=bool(token),
+        config_status=get_config_status(),
     )
 
 
 @app.post("/api/scan", response_model=ScanResponse)
 def scan(request: ScanRequest):
+    scan_path = request.repo_url
+    if not Path(scan_path).exists():
+        for candidate in ["../demo-vulnerable-app", "demo-vulnerable-app", ".."]:
+            if Path(candidate).exists():
+                scan_path = candidate
+                break
     try:
         findings, files_scanned, duration_ms = scan_repository(
-            request.repo_url
+            scan_path
         )
     except FileNotFoundError as error:
         raise HTTPException(
@@ -165,6 +177,43 @@ async def fix(request: FixRequest):
     return result
 
 
+@app.post("/api/explain", response_model=ExplainResponse)
+async def explain(request: ExplainRequest):
+    finding: Finding | None = None
+
+    if request.finding:
+        finding = request.finding
+    elif request.scan_id and request.finding_id:
+        scan_result = scans.get(request.scan_id)
+        if not scan_result:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Scan '{request.scan_id}' not found.",
+            )
+        for f in scan_result.findings:
+            if f.id == request.finding_id:
+                finding = f
+                break
+        if not finding:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Finding '{request.finding_id}' not found in scan '{request.scan_id}'.",
+            )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Either 'finding' or both 'scan_id' and 'finding_id' must be provided.",
+        )
+
+    explanation, impact, recommendation = await default_agent.generate_explanation_async(finding)
+    return ExplainResponse(
+        finding_id=finding.id,
+        explanation=explanation,
+        impact=impact,
+        recommendation=recommendation,
+    )
+
+
 @app.post("/api/apply-pr", response_model=ApplyPRResponse, status_code=status.HTTP_201_CREATED)
 async def apply_pr(payload: ApplyPRRequest):
     """
@@ -175,15 +224,43 @@ async def apply_pr(payload: ApplyPRRequest):
       - line_number: 1-indexed target line
       - fixed_code: replacement code string
       - severity, cwe, explanation, impact, diff details
-    Returns:
-      {
-        "branch": "patch/sqli-f001-1734",
-        "commit_sha": "3fa9c1e...",
-        "pr_number": 7,
-        "pr_url": "https://github.com/...",
-        "files_changed": 1
-      }
+      - or scan_id and finding_id/finding_ids to auto-enrich from scan
     """
+    # Auto-enrich from scan if scan_id and finding_id/finding_ids are supplied
+    target_finding_id = (payload.finding_ids[0] if payload.finding_ids else None) or payload.finding_id
+    if payload.scan_id and target_finding_id:
+        scan_result = scans.get(payload.scan_id)
+        if scan_result:
+            matched_finding = next((f for f in scan_result.findings if f.id == target_finding_id), None)
+            if matched_finding:
+                if not payload.file_path:
+                    payload.file_path = matched_finding.file_path
+                if not payload.line_number:
+                    payload.line_number = matched_finding.line_start
+                if not payload.original_code:
+                    payload.original_code = matched_finding.snippet
+                if not payload.rule_id:
+                    payload.rule_id = matched_finding.rule_id
+                if not payload.severity:
+                    payload.severity = matched_finding.severity.value
+                if not payload.cwe:
+                    payload.cwe = matched_finding.cwe
+                if not payload.title:
+                    payload.title = f"fix: resolve {matched_finding.rule_id} in {matched_finding.file_path}"
+                if not payload.fixed_code:
+                    fix_res = await default_agent.generate_fix_async(matched_finding)
+                    payload.fixed_code = fix_res.fixed_code
+                    if not payload.diff:
+                        payload.diff = fix_res.diff
+                    if not payload.explanation:
+                        payload.explanation = fix_res.explanation_of_change
+
+    if not payload.file_path or not payload.line_number or not payload.fixed_code:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing required fields: file_path, line_number, and fixed_code must be provided or resolvable from scan_id and finding_id.",
+        )
+
     client = GitHubClient()
 
     try:

@@ -269,3 +269,96 @@ def test_live_groq_fix_generation(sample_sqli_finding: Finding):
     assert result.diff != ""
     assert result.explanation_of_change != ""
 
+
+def test_admin_js_callback_bracket_validation():
+    from app.ai.client import check_code_syntax
+
+    orig = '  exec("ping -c 1 " + host, (err, stdout, stderr) => {'
+    good_fixed = '  require(\'child_process\').execFile("ping", ["-c", "1", host], (err, stdout, stderr) => {'
+    bad_fixed = '  require(\'child_process\').execFile("ping", ["-c", "1", host], (err, stdout, stderr) => '  # missing {
+
+    valid, reason = check_code_syntax(orig, good_fixed)
+    assert valid is True
+
+    valid_bad, reason_bad = check_code_syntax(orig, bad_fixed)
+    assert valid_bad is False
+    assert "syntax error" in reason_bad
+
+
+def test_repair_path_succeeds_on_second_attempt(sample_sqli_finding: Finding, monkeypatch):
+    agent = AIFixAgent(api_key="mock_key")
+
+    call_count = 0
+
+    def mock_post(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        class MockResponse:
+            status_code = 200
+            def raise_for_status(self):
+                pass
+            def json(self):
+                if call_count == 1:
+                    # First attempt has syntax error (unclosed bracket)
+                    return {
+                        "choices": [{
+                            "message": {
+                                "content": '{"finding_id": "f_001", "file_path": "src/users.js", "original_code": "db.query(\\"SELECT * FROM users WHERE id=\\" + id);", "fixed_code": "db.query(\\"SELECT *\\", [id;", "diff": "", "explanation_of_change": "Bad fix", "confidence": 0.5}'
+                            }
+                        }]
+                    }
+                else:
+                    # Repaired attempt is valid
+                    return {
+                        "choices": [{
+                            "message": {
+                                "content": '{"finding_id": "f_001", "file_path": "src/users.js", "original_code": "db.query(\\"SELECT * FROM users WHERE id=\\" + id);", "fixed_code": "db.query(\\"SELECT *\\", [id]);", "diff": "", "explanation_of_change": "Repaired fix", "confidence": 0.95}'
+                            }
+                        }]
+                    }
+
+        return MockResponse()
+
+    monkeypatch.setattr("httpx.Client.post", mock_post)
+
+    result = agent.generate_fix(sample_sqli_finding)
+    assert call_count == 2
+    assert result.fixed_code == 'db.query("SELECT *", [id]);'
+    assert result.confidence == 0.95
+    assert "--- a/src/users.js" in result.diff
+
+
+def test_repair_path_fails_safely_when_repair_also_invalid(sample_sqli_finding: Finding, monkeypatch):
+    agent = AIFixAgent(api_key="mock_key")
+
+    call_count = 0
+
+    def mock_post(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        class MockResponse:
+            status_code = 200
+            def raise_for_status(self):
+                pass
+            def json(self):
+                return {
+                    "choices": [{
+                        "message": {
+                            "content": '{"finding_id": "f_001", "file_path": "src/users.js", "original_code": "db.query(\\"SELECT * FROM users WHERE id=\\" + id);", "fixed_code": "db.query(\\"SELECT *\\", [id;", "diff": "", "explanation_of_change": "Always broken", "confidence": 0.5}'
+                        }
+                    }]
+                }
+
+        return MockResponse()
+
+    monkeypatch.setattr("httpx.Client.post", mock_post)
+
+    result = agent.generate_fix(sample_sqli_finding)
+    assert call_count == 2
+    assert result.fixed_code == ""
+    assert result.diff == ""
+    assert result.confidence == 0.0
+    assert "failed validation after repair attempt" in result.explanation_of_change
+
+
+

@@ -9,7 +9,8 @@ RULES = [
         "category": "injection",
         "cwe": "CWE-89",
         "pattern": re.compile(
-            r"\.(query|execute)\s*\(.*\+.*\)"
+            r"(\.(query|execute)\s*\(.*\+.*\)|\b(?:SELECT|INSERT|UPDATE|DELETE)\b.*['\"].*\+)",
+            re.IGNORECASE,
         ),
         "file_extensions": {".js", ".jsx", ".ts", ".tsx"},
     },
@@ -20,7 +21,7 @@ RULES = [
         "category": "credentials",
         "cwe": "CWE-798",
         "pattern": re.compile(
-            r"(api_key|apiKey|secret|password|token)\s*=\s*['\"][^'\"]{8,}['\"]",
+            r"(api_key|apiKey|secret|password|token)\s*[:=]\s*['\"][^'\"]{8,}['\"]",
             re.IGNORECASE,
         ),
         "file_extensions": {".js", ".jsx", ".ts", ".tsx"},
@@ -77,7 +78,7 @@ RULES = [
         "category": "path-traversal",
         "cwe": "CWE-22",
         "pattern": re.compile(
-            r"(readFile|readFileSync|createReadStream)\s*\(.*(req\.|params)"
+            r"path\.(join|resolve)\s*\(.*(fileName|filename|file|req\.|params)|(readFile|readFileSync|createReadStream)\s*\(.*(filePath|req\.|params)"
         ),
         "file_extensions": {".js", ".jsx", ".ts", ".tsx"},
     },

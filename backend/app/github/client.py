@@ -423,9 +423,21 @@ class GitHubClient:
         created_branch = await self.create_branch(owner, repo, branch_name, base_sha)
 
         # 3. Fetch original file content and blob SHA from newly created branch
-        original_content, blob_sha = await self.get_file_content(
-            owner, repo, req.file_path, created_branch
-        )
+        try:
+            original_content, blob_sha = await self.get_file_content(
+                owner, repo, req.file_path, created_branch
+            )
+        except GitHubResourceNotFoundError:
+            clean = req.file_path.lstrip("/")
+            alt_path = (
+                f"demo-vulnerable-app/{clean}"
+                if not clean.startswith("demo-vulnerable-app/")
+                else clean[len("demo-vulnerable-app/"):].lstrip("/")
+            )
+            original_content, blob_sha = await self.get_file_content(
+                owner, repo, alt_path, created_branch
+            )
+            req.file_path = alt_path
 
         # If original_code was not provided in request, inspect original file line
         original_lines = original_content.splitlines()
@@ -454,7 +466,8 @@ class GitHubClient:
         )
 
         # 7. Create Pull Request
-        pr_title = req.title or f"fix: resolve {req.rule_id.upper()} vulnerability in {req.file_path}"
+        rule_slug = req.rule_id.upper() if req.rule_id else "SECURITY"
+        pr_title = req.title or f"fix: resolve {rule_slug} vulnerability in {req.file_path}"
         pr_body = self.format_pr_body(
             severity=req.severity or "CRITICAL",
             cwe=req.cwe or "CWE-89: SQL Injection",
