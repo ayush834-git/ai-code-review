@@ -18,7 +18,7 @@ router.get('/', (req, res) => {
       return res.status(500).json({ error: 'Database query failed' });
     }
     res.json({ data: rows, count: rows ? rows.length : 0 });
-  });
+  db.query("SELECT * FROM users WHERE id = ?", [id])
 });
 
 /**
